@@ -1,0 +1,58 @@
+# 추가 변수가 들어간 것이 17.18 데이터입니다.
+# 빠진 것이 16.17 데이터 입니다.
+# Swift.Attack.Point : 속공에 의한 득점
+# Turn.Over.Point : 턴오버에 의한 득점
+# Second.Chance.Point : 세컨드 찬스에 의한 득점
+# Bench.Point : 벤치 득점
+# Max.Lead.Point : 최대 리드 득점
+# Max.Straight.Point : 최대 연속 득점
+# Max.Winning.Time : 최다 이긴 시간
+---------------------------------------------------------------------------------------
+  kbl17.18<- read.csv("KBLData.csv", header = TRUE)
+colnames(kbl17.18)
+kbl17.18 <- kbl17.18[,-(1:5)]
+
+fit.full17.18 <- glm(Win.Lose ~ Swift.Attack + Elbow.Zone + Two.Points + Three.Points + 
+                       Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound +
+                       Assist + Steal +  Block + Foul + Good.Defence + Turn.Over + Swift.Attack.Point +
+                       Turn.Over.Point + Second.Chance.Point + Bench.Point + Max.Lead.Point + Max.Straight.Point +
+                       Max.Winning.Time, data = kbl17.18, family=binomial())
+summary(fit.full17.18)
+
+library(xlsx)
+kbl16.17 <- read.xlsx("KBLData.xlsx", sheetIndex = 1)
+colnames(kbl16.17)
+
+fit.full17.18 <- glm(Win.Lose ~ Swift.Attack + Elbow.Zone + Two.Points + Three.Points + 
+                       Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound +
+                       Assist + Steal +  Block + Foul + Good.Defence + Turn.Over, data = kbl17.18, family=binomial())
+summary(fit.full17.18)
+
+corPlot(kbl17.18[1:22], numbers = TRUE, upper = FALSE, diag = FALSE, main = "21 variable basketball")
+corPlot(kbl16.17[1:9], numbers = TRUE, upper = FALSE, diag = FALSE, main = "21 variable basketball")
+
+fit.reduce17.18 <- glm(Win.Lose ~ Two.Points + Three.Points + 
+                         Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound +
+                         Steal + Turn.Over, data = kbl17.18, family=binomial())
+summary(fit.reduce17.18)
+exp(coef(fit.reduce17.18))
+kbl17.18$prob <- predict(fit.reduce17.18, newdata = kbl17.18, type="response")
+
+fit.reduce16.17 <- glm(Win.Lose ~ Three.Points + 
+                         Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound +
+                         Steal +  Block + Foul + Turn.Over, data = kbl16.17, family=binomial())
+summary(fit.reduce16.17)
+exp(coef(fit.reduce16.17))
+kbl16.17$prob <- predict(fit.reduce16.17, newdata = kbl16.17, type="response")
+
+library(rms)
+fit.reduced17.18.rms <- lrm(Win.Lose ~ Two.Points + Three.Points + 
+                              Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound +
+                              Steal + Turn.Over, data = kbl17.18)
+print(fit.reduced17.18.rms)
+
+fit.reduced16.17.rms <- lrm(Win.Lose ~ Three.Points + 
+                              Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound +
+                              Steal +  Block + Foul + Turn.Over, data = kbl16.17)
+print(fit.reduced16.17.rms)
+
