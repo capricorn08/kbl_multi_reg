@@ -1,0 +1,114 @@
+1. KBL 데이터 불러와서 합치기
+```{r}
+kbl17.18<- read.csv("KBLData.csv", header = TRUE)
+kbl17.18 <- kbl17.18[,-(16:22)]
+
+library(xlsx)
+kbl16.17 <- read.xlsx("KBLData.xlsx", sheetIndex = 1)
+
+kbl <- rbind(kbl16.17, kbl17.18)
+colnames(kbl)
+```
+17.18데이터에는 추가변수가 있으므로 추가변수를 제거한 후에 rbind를 사용하여 두 데이터를 합쳤다.
+
+2. 정규화
+```{r}
+kbl$Win.Lose <- factor(kbl$Win.Lose, levels=c(0,1), 
+                            labels=c("Win", "Lose"))
+
+kbl[,-1] <- scale(kbl[,-1])
+
+```
+종속변수로 설정할 Win.Lose를 Factor로 지정하고 Win.Lose를 제외한 다른 변수를 정규화하였다.
+
+3. 학습 데이터와 검증 데이터 셋으로 구분
+```{r}
+set.seed(1234)
+train <- sample(nrow(kbl), 0.7*nrow(kbl))
+df.train <- kbl[train,]
+df.validate <- kbl[-train,]
+table(df.train$class)
+table(df.validate$class)
+```
+
+4. 로지스틱 회귀분석을 이용한 예측
+```{r}
+fit.logit <- glm(Win.Lose~., data=df.train, family=binomial())
+fit.logit2 <- glm(Win.Lose ~ Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound + Steal + Block + Foul + Turn.Over ,data=df.train, family=binomial())
+logit.fit.reduced <- step(fit.logit)
+summary(fit.logit)
+summary(fit.logit2)
+prob <- predict(fit.logit, df.validate, type="response")
+prob2 <- predict(fit.logit2, df.validate, type="response")
+logit.pred <- factor(prob > .5, levels=c(FALSE, TRUE), 
+                     labels=c("Win", "Lose"))
+logit.pred2 <- factor(prob2 > .5, levels=c(FALSE, TRUE), 
+                      labels=c("Win", "Lose"))
+logit.perf <- table(df.validate$Win.Lose, logit.pred)
+logit.perf2 <- table(df.validate$Win.Lose, logit.pred2)
+logit.perf
+logit.perf2
+```
+fit.logit은 모든 변수를 독립변수로 설정하여 분석한 것이고 fit.logit2는 fit.logit에서 유의미하지 않은 변수와 서로 겹치는 변수를 제거하였다. Three Point와 Three Point Percent, Two Point와 Two Point Percent 중에 Percent를 선택하였다.
+fit.logit은 83%정도의 정확도를 보였으며 fit.logit2는 80%정도의 정확도를 보였다. 두 분석이 정확도 측면에서 별로 차이가 나지 않으므로 비교적 간단한 모델인 fit.logit2를 사용하는 것이 옳다고 판단된다.
+
+5. 의사결정나무를 이용한 예측
+```{r}
+library(rpart)
+set.seed(1234)
+dtree <- rpart(Win.Lose ~ Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound + Steal + Block + Foul + Turn.Over, data=df.train, method="class",      
+               parms=list(split="information"))
+summary(dtree)
+dtree$cptable
+plotcp(dtree)
+dtree.pruned <- prune(dtree, cp= .01605505)
+
+library(rpart.plot)
+prp(dtree.pruned, type = 2, extra = 104,  
+    fallen.leaves = TRUE, main="Decision Tree")
+
+dtree.pred <- predict(dtree.pruned, df.validate, type="class")
+dtree.perf <- table(df.validate$Win.Lose, dtree.pred, 
+                    dnn=c("Actual", "Predicted"))
+dtree.perf
+```
+cp 계수를 산정하기 위해 Plot을 그려보았더니 7번째의 cp가 적당한 것으로 보여졌다. 따라서 cp계수를 .01605505로 설정하였고 61%의 정확도를 보였다.
+
+6. Conditional Inference Tree를 이용한 예측
+```{r}
+library(party)
+
+fit.ctree <- ctree(Win.Lose~Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound + Steal + Block + Foul + Turn.Over, data=df.train)
+plot(fit.ctree, main="Conditional Inference Tree")
+summary(fit.ctree)
+
+ctree.pred <- predict(fit.ctree, df.validate, type="response")
+ctree.perf <- table(df.validate$Win.Lose, ctree.pred, 
+                    dnn=c("Actual", "Predicted"))
+ctree.perf
+
+library(partykit)
+
+plot(as.party(dtree.pruned))
+```
+66%의 정확도를 보였다.
+
+7. 랜덤포레스트를 이용한 예측
+```{r}
+library(randomForest)
+set.seed(1234)
+fit.forest <- randomForest(Win.Lose~Two.Points.Percent + Three.Points.Percent + Free.Throw.Percent + Rebound + Steal + Block + Foul + Turn.Over, data=df.train,        
+                           na.action=na.roughfix,
+                           importance=TRUE)             
+fit.forest
+
+importance(fit.forest, type=2)
+
+forest.pred <- predict(fit.forest, df.validate)         
+forest.perf <- table(df.validate$Win.Lose, forest.pred, 
+                     dnn=c("Actual", "Predicted"))
+forest.perf
+
+varImpPlot(fit.forest)
+```
+72%의 정확도를 보였으며 Two Point Percent, Three Point Percent, Rebound가 예측을 하는데에 있어 중요한 변수로 보여졌다.
